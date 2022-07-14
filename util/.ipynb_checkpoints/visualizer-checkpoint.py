@@ -18,23 +18,7 @@ else:
     VisdomExceptionBase = ConnectionError
 
 
-def log_wandb_table(images, columns, keep_alpha_channel=False):
-    
-    val_data = []
-    for image_paths, visuals in images:
-        row = [os.path.basename(image_paths[0])]
-        for label in columns:
-            im_data = visuals[label]
-            im = util.tensor2im(im_data,keep_alpha_channel=keep_alpha_channel)
-            row.append(wandb.Image(im))
-        val_data.append(row)
-    columns.insert(0, "name")
-    val_table = wandb.Table(data=val_data, columns=columns)
-    wandb.log({"val table": val_table})
-
-        
-
-def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_wandb=False, keep_alpha_channel=False):
+def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_wandb=False):
     """Save images to the disk.
 
     Parameters:
@@ -54,7 +38,7 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_w
     ims, txts, links = [], [], []
     ims_dict = {}
     for label, im_data in visuals.items():
-        im = util.tensor2im(im_data,keep_alpha_channel=keep_alpha_channel)
+        im = util.tensor2im(im_data)
         image_name = '%s_%s.png' % (name, label)
         save_path = os.path.join(image_dir, image_name)
         util.save_image(im, save_path, aspect_ratio=aspect_ratio)

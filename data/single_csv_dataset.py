@@ -1,10 +1,10 @@
 from data.base_dataset import BaseDataset, get_transform
 from data.image_folder import make_dataset
 from PIL import Image
-import numpy as np
+import os
+import pandas as pd
 
-
-class SingleDataset(BaseDataset):
+class SingleCSVDataset(BaseDataset):
     """This dataset class can load a set of images specified by the path --dataroot /path/to/data.
 
     It can be used for generating CycleGAN results only for one side with the model option '-model test'.
@@ -17,10 +17,13 @@ class SingleDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
-        self.A_paths = sorted(make_dataset(opt.dataroot, opt.max_dataset_size))
+        # self.A_paths = sorted(make_dataset(opt.dataroot, opt.max_dataset_size))
+        csv_path = os.path.join(opt.dataroot, opt.phase+".csv")  # get csv file path
+        df = pd.read_csv(csv_path)
+        self.A_paths = list(df.A)
+
         input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
-        self.transform = get_transform(
-            opt, grayscale=(input_nc == 1), channel=input_nc)
+        self.transform = get_transform(opt, grayscale=(input_nc == 1),channel=input_nc)
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -33,11 +36,9 @@ class SingleDataset(BaseDataset):
             A_paths(str) - - the path of the image
         """
         A_path = self.A_paths[index]
-        A_img = Image.open(A_path)  # .convert('RGB')
-        if self.opt.input_nc == self.opt.output_nc == 1:
-            A_img = Image.fromarray(np.array(A_img)[:, :, -1])
+        A_img = Image.open(A_path)#.convert('RGB')
         A = self.transform(A_img)
-        return {'A': A, 'A_paths': A_path, 'B': A, 'B_paths': A_path}
+        return {'A': A, 'A_paths': A_path}
 
     def __len__(self):
         """Return the total number of images in the dataset."""

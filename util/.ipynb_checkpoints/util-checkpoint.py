@@ -6,7 +6,7 @@ from PIL import Image
 import os
 
 
-def tensor2im(input_image, imtype=np.uint8, keep_alpha_channel=False):
+def tensor2im(input_image, imtype=np.uint8):
     """"Converts a Tensor array into a numpy image array.
 
     Parameters:
@@ -26,7 +26,7 @@ def tensor2im(input_image, imtype=np.uint8, keep_alpha_channel=False):
         image_numpy = input_image
         
     # cvt rgba to rgb
-    if image_numpy.shape[-1]==4 and not keep_alpha_channel:
+    if image_numpy.shape[-1]==4:
         a = image_numpy[:,:,-1].astype("float")/255
         a = np.stack([a]*3, axis=-1)
         img = image_numpy[:,:,:-1]

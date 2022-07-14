@@ -23,24 +23,45 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
+from util.visualizer import save_images, log_wandb_table
+from util import html
+import os
+from argparse import Namespace
+
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    # create a dataset given opt.dataset_mode and other options
+    dataset = create_dataset(opt)
     dataset_size = len(dataset)    # get the number of images in the dataset.
+    val_opt = Namespace(**vars(opt))
+    val_opt.phase = "val"
+    val_opt.dataroot = "datasets/carandbike/"
+    val_opt.no_flip = True
+    val_opt.dataset_mode = "single"
+    val_dataset = create_dataset(val_opt)
     print('The number of training images = %d' % dataset_size)
 
-    model = create_model(opt)      # create a model given opt.model and other options
-    model.setup(opt)               # regular setup: load and print networks; create schedulers
-    visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
+    # create a model given opt.model and other options
+    model = create_model(opt)
+    # regular setup: load and print networks; create schedulers
+    model.setup(opt)
+    if opt.model == "cycle_gan":
+        model.netG = model.netG_A
+    # create a visualizer that display/save images and plots
+    visualizer = Visualizer(opt)
     total_iters = 0                # the total number of training iterations
 
-    for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
+    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
+    for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
-        epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
-        visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
-        model.update_learning_rate()    # update learning rates in the beginning of every epoch.
+        # the number of training iterations in current epoch, reset to 0 every epoch
+        epoch_iter = 0
+        # reset the visualizer: make sure it saves the results to HTML at least once every epoch
+        visualizer.reset()
+        # update learning rates in the beginning of every epoch.
+        model.update_learning_rate()
         for i, data in enumerate(dataset):  # inner loop within one epoch
             iter_start_time = time.time()  # timer for computation per iteration
             if total_iters % opt.print_freq == 0:
@@ -48,30 +69,58 @@ if __name__ == '__main__':
 
             total_iters += opt.batch_size
             epoch_iter += opt.batch_size
-            model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
+            # unpack data from dataset and apply preprocessing
+            model.set_input(data)
+            # calculate loss functions, get gradients, update network weights
+            model.optimize_parameters()
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 save_result = total_iters % opt.update_html_freq == 0
                 model.compute_visuals()
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+                visualizer.display_current_results(
+                    model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
                 t_comp = (time.time() - iter_start_time) / opt.batch_size
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
+                visualizer.print_current_losses(
+                    epoch, epoch_iter, losses, t_comp, t_data)
                 if opt.display_id > 0:
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
+                    visualizer.plot_current_losses(
+                        epoch, float(epoch_iter) / dataset_size, losses)
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
-                print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
+                print('saving the latest model (epoch %d, total_iters %d)' %
+                      (epoch, total_iters))
                 save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
                 model.save_networks(save_suffix)
+            if total_iters % opt.val_freq == 0:
+                web_dir = os.path.join("results", opt.name, '{}_{}_{}'.format(
+                    "val", epoch_iter, epoch))  # define the website directory
+                webpage = html.HTML(
+                    web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, "val", epoch))
+                log_images = []
+                for j, val_data in enumerate(val_dataset):
+                    if j >= opt.num_val:  # only apply our model to opt.num_test images.
+                        break
+                    realA = val_data["A"]  # unpack data from data loader
+                    img_path = val_data["A_paths"]
+                    fakeB = model.netG(realA)           # run inference
+                    # visuals = model.get_current_visuals()  # get image results
+                    # img_path = model.get_image_paths()     # get image paths
+                    if j % 5 == 0:  # save images to an HTML file
+                        print('processing (%04d)-th image... %s' %
+                              (i, img_path))
+                    # save_images(webpage, {"val_real_A":realA, "val_fake_B":fakeB}, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize, use_wandb=opt.use_wandb, keep_alpha_channel=True)
+                    log_images.append(
+                        [img_path, {"val_real_A": realA, "val_fake_B": fakeB.detach().cpu()}])
+                log_wandb_table(log_images, ["val_real_A", "val_fake_B"])
 
             iter_data_time = time.time()
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-            print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
+            print('saving the model at the end of epoch %d, iters %d' %
+                  (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
-
-        print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
+        print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch,
+              opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))

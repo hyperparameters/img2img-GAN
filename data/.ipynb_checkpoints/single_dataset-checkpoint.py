@@ -1,7 +1,6 @@
 from data.base_dataset import BaseDataset, get_transform
 from data.image_folder import make_dataset
 from PIL import Image
-import numpy as np
 
 
 class SingleDataset(BaseDataset):
@@ -19,8 +18,7 @@ class SingleDataset(BaseDataset):
         BaseDataset.__init__(self, opt)
         self.A_paths = sorted(make_dataset(opt.dataroot, opt.max_dataset_size))
         input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
-        self.transform = get_transform(
-            opt, grayscale=(input_nc == 1), channel=input_nc)
+        self.transform = get_transform(opt, grayscale=(input_nc == 1),channel=input_nc)
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -33,11 +31,9 @@ class SingleDataset(BaseDataset):
             A_paths(str) - - the path of the image
         """
         A_path = self.A_paths[index]
-        A_img = Image.open(A_path)  # .convert('RGB')
-        if self.opt.input_nc == self.opt.output_nc == 1:
-            A_img = Image.fromarray(np.array(A_img)[:, :, -1])
+        A_img = Image.open(A_path)#.convert('RGB')
         A = self.transform(A_img)
-        return {'A': A, 'A_paths': A_path, 'B': A, 'B_paths': A_path}
+        return {'A': A, 'A_paths': A_path}
 
     def __len__(self):
         """Return the total number of images in the dataset."""

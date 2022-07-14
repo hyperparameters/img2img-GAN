@@ -7,8 +7,9 @@ import numpy as np
 import cv2
 import albumentations as A
 import torch
+import pandas as pd
 
-class UnalignedDataset(BaseDataset):
+class UnalignedCSVDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
 
@@ -26,11 +27,17 @@ class UnalignedDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
-        self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')  # create a path '/path/to/data/trainA'
-        self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')  # create a path '/path/to/data/trainB'
+        csv_path = os.path.join(opt.dataroot, opt.phase+".csv")  # get csv file path
+        df = pd.read_csv(csv_path)
 
-        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
-        self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
+        # self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')  # create a path '/path/to/data/trainA'
+        # self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')  # create a path '/path/to/data/trainB'
+
+        # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
+        # self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
+        self.A_paths = list(df.A)
+        self.B_paths = list(df.B)
+
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         btoA = self.opt.direction == 'BtoA'
@@ -59,6 +66,12 @@ class UnalignedDataset(BaseDataset):
         B_path = self.B_paths[index_B]
         A_img = Image.open(A_path)#.convert('RGB')
         B_img = Image.open(B_path)#.convert('RGB')
+        if self.opt.input_nc == self.opt.output_nc==1:
+            A_img = np.array(A_img)[:,:,-1]
+            B_img = np.array(B_img)[:,:,-1]
+            if self.opt.threshold:
+                A_img = (A_img>10).astype("uint8") * 255
+                B_img = (B_img>10).astype("uint8") * 255
         
         # apply image transformation
         
